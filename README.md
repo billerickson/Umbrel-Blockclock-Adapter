@@ -35,6 +35,8 @@ The adapter rotates one value onto the E-Ink display every five minutes.
 The Public Pool metrics are optional and can be disabled through `ENABLED_METRICS`.
 `blocks_found` is conditional: it stays out of the normal rotation while the
 pool count matches the locally acknowledged counter.
+Block Age shows `BLK/AGE` on the left, the age value in the numeric area, and
+`MIN` in the rightmost panel.
 
 ## Example network
 

@@ -2,7 +2,7 @@ import os
 import unittest
 from dataclasses import replace
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 from blockclock_adapter.app import (
     Adapter,
@@ -55,9 +55,24 @@ class DisplayTests(unittest.TestCase):
 
     def test_block_age_shows_minutes(self):
         path, query = BlockclockClient._display_request("block_age", 17)
-        self.assertEqual(path, "/api/show/number/17")
+        self.assertEqual(path, "/api/show/text/%20%20%2017%20")
         self.assertEqual(query["pair"], "BLK/AGE")
         self.assertEqual(query["br"], "MINUTES")
+
+    def test_block_age_adds_min_to_rightmost_panel(self):
+        client = BlockclockClient(self.config)
+        with patch.object(client, "_get") as get:
+            client.show("block_age", 3)
+        self.assertEqual(
+            get.call_args_list,
+            [
+                call(
+                    "/api/show/text/%20%20%20%203%20"
+                    "?tl=BLOCK+AGE&br=MINUTES&pair=BLK%2FAGE"
+                ),
+                call("/api/ou_text/6/MIN/%20"),
+            ],
+        )
 
     def test_blocks_found_shows_unit_on_left(self):
         path, query = BlockclockClient._display_request("blocks_found", 3)

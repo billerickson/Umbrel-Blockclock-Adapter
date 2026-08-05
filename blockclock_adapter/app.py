@@ -360,6 +360,8 @@ class BlockclockClient:
     def show(self, metric: str, value: float | int) -> None:
         path, query = self._display_request(metric, value)
         self._get(f"{path}?{urllib.parse.urlencode(query)}")
+        if metric == "block_age":
+            self._get("/api/ou_text/6/MIN/%20")
 
     def _get(self, path: str) -> Any:
         request = urllib.request.Request(
@@ -374,7 +376,8 @@ class BlockclockClient:
         if metric == "block_height":
             return f"/api/show/number/{int(value)}", {"tl": "BLOCK HEIGHT", "br": "LOCAL NODE"}
         if metric == "block_age":
-            return f"/api/show/number/{int(value)}", {
+            text = urllib.parse.quote(f"{int(value):>5} ", safe="")
+            return f"/api/show/text/{text}", {
                 "tl": "BLOCK AGE",
                 "br": "MINUTES",
                 "pair": "BLK/AGE",
