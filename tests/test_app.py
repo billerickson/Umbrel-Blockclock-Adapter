@@ -40,6 +40,11 @@ class DisplayTests(unittest.TestCase):
         self.assertEqual(path, "/api/show/number/870")
         self.assertEqual(query["pair"], "SAT/USD")
 
+    def test_fastest_fee_shows_unit_on_left(self):
+        path, query = BlockclockClient._display_request("fastest_fee", 12)
+        self.assertEqual(path, "/api/show/number/12")
+        self.assertEqual(query["pair"], "SATS/VB")
+
     def test_hashrate_uses_text_endpoint(self):
         path, query = BlockclockClient._display_request("hash_rate", 813_234_574_831.3806)
         self.assertEqual(path, "/api/show/text/813GH")

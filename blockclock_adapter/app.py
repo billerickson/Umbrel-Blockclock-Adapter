@@ -293,7 +293,11 @@ class BlockclockClient:
         if metric == "block_height":
             return f"/api/show/number/{int(value)}", {"tl": "BLOCK HEIGHT", "br": "LOCAL NODE"}
         if metric == "fastest_fee":
-            return f"/api/show/number/{int(value)}", {"tl": "FASTEST FEE", "br": "sat/vB"}
+            return f"/api/show/number/{int(value)}", {
+                "tl": "FASTEST FEE",
+                "br": "sat/vB",
+                "pair": "SATS/VB",
+            }
         if metric == "btc_price":
             return f"/api/show/number/{round(float(value))}", {
                 "tl": "BTC PRICE",
