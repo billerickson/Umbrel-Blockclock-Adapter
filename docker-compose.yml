@@ -14,11 +14,12 @@ services:
       PRICE_ALLOWED_HOSTS: ${PRICE_ALLOWED_HOSTS:-api.coinbase.com}
       BLOCKCLOCK_URL: ${BLOCKCLOCK_URL:-http://192.168.40.20}
       BLOCKCLOCK_PASSWORD: ${BLOCKCLOCK_PASSWORD:-}
-      ENABLED_METRICS: ${ENABLED_METRICS:-block_height,fastest_fee,btc_price,moscow_time,hash_rate,blocks_found}
+      ENABLED_METRICS: ${ENABLED_METRICS:-block_height,block_age,fastest_fee,btc_price,moscow_time,hash_rate,blocks_found}
       DISPLAY_INTERVAL_SECONDS: ${DISPLAY_INTERVAL_SECONDS:-300}
       SOURCE_TIMEOUT_SECONDS: ${SOURCE_TIMEOUT_SECONDS:-10}
       BIND_HOST: ${BIND_HOST:-127.0.0.1}
       BIND_PORT: ${BIND_PORT:-21022}
+      STATE_FILE: ${STATE_FILE:-/var/lib/blockclock-adapter/state.json}
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -26,3 +27,8 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=8m,mode=1777
+    volumes:
+      - blockclock-adapter-state:/var/lib/blockclock-adapter
+
+volumes:
+  blockclock-adapter-state:

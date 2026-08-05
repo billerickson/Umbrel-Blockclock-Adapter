@@ -6,7 +6,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     BLOCKCLOCK_ADAPTER_VERSION=${BLOCKCLOCK_ADAPTER_VERSION}
 
-RUN addgroup -S blockclock && adduser -S -G blockclock blockclock
+RUN addgroup -S blockclock \
+    && adduser -S -G blockclock blockclock \
+    && mkdir -p /var/lib/blockclock-adapter \
+    && chown blockclock:blockclock /var/lib/blockclock-adapter
 
 WORKDIR /app
 COPY blockclock_adapter /app/blockclock_adapter

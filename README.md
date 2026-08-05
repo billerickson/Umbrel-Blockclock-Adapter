@@ -25,6 +25,7 @@ The adapter rotates one value onto the E-Ink display every five minutes.
 | Display | Source |
 | --- | --- |
 | Block height | `GET http://127.0.0.1:3006/api/blocks/tip/height` |
+| Block age | Minutes since the latest block from `GET http://127.0.0.1:3006/api/v1/blocks` |
 | Fastest fee | `fastestFee` from `GET http://127.0.0.1:3006/api/v1/fees/recommended` |
 | BTC/USD | `GET https://api.coinbase.com/v2/prices/BTC-USD/spot` |
 | Moscow Time | `round(100,000,000 / BTC_USD)` |
@@ -32,6 +33,8 @@ The adapter rotates one value onto the E-Ink display every five minutes.
 | Blocks found | Length or numeric value of `blocksFound` from the pool response |
 
 The Public Pool metrics are optional and can be disabled through `ENABLED_METRICS`.
+`blocks_found` is conditional: it stays out of the normal rotation while the
+pool count matches the locally acknowledged counter.
 
 ## Example network
 
@@ -209,6 +212,23 @@ curl -fsS http://127.0.0.1:21022/status
 A healthy response has an empty `errors` object, `display_error: null`, and a
 `deployed_commit` matching `git rev-parse HEAD`.
 
+The response also includes `current_block_counter`, the pool's current
+`blocks_found` value, and `blocks_found_alert_active`. When the pool count rises
+above the persistent counter, the adapter immediately shows `BLOCKS FOUND`,
+calls the BLOCKCLOCK's configured light-flash animation once, and keeps the
+notice in the normal rotation.
+
+After noticing a found block, acknowledge one block from Umbrel:
+
+```sh
+curl -fsS -X POST http://127.0.0.1:21022/blocks-found/acknowledge
+```
+
+Each request increments `current_block_counter` by one, up to the pool's actual
+count. Once the counters match, `BLOCKS FOUND` leaves the rotation. Both the
+acknowledgment and last-flashed counters survive container rebuilds in the
+`blockclock-adapter-state` Docker volume.
+
 ## Update on Umbrel
 
 Run the deployment script from an interactive SSH session so `sudo` can prompt
@@ -229,7 +249,7 @@ and the expected Git commit. The host-specific `.env` remains untracked.
 Set `ENABLED_METRICS` to omit the optional pool displays:
 
 ```dotenv
-ENABLED_METRICS=block_height,fastest_fee,btc_price,moscow_time
+ENABLED_METRICS=block_height,block_age,fastest_fee,btc_price,moscow_time
 ```
 
 The display interval cannot be set below 60 seconds. Five minutes is the
@@ -237,6 +257,10 @@ default because Coinkite recommends a low update rate for the E-Ink display.
 
 The price URL must use HTTPS and its hostname must appear in
 `PRICE_ALLOWED_HOSTS`. The defaults permit only `api.coinbase.com`.
+
+The BLOCKCLOCK's **Flash Lights When Changing** setting must be enabled for its
+`/api/lights/flash` animation to run. The adapter explicitly calls that endpoint
+only when it observes a higher `blocks_found` count.
 
 ## Verify the isolation
 
