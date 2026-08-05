@@ -315,7 +315,11 @@ class BlockclockClient:
             text = urllib.parse.quote(compact_hashrate(float(value)), safe="")
             return f"/api/show/text/{text}", {"tl": "POOL HASH", "br": "hash/s"}
         if metric == "blocks_found":
-            return f"/api/show/number/{int(value)}", {"tl": "BLOCKS FOUND", "br": "POOL"}
+            return f"/api/show/number/{int(value)}", {
+                "tl": "BLOCKS FOUND",
+                "br": "POOL",
+                "pair": "BLOCKS FOUND",
+            }
         raise ValueError(f"unsupported metric: {metric}")
 
 
