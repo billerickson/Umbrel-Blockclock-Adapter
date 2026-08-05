@@ -29,12 +29,26 @@ METRIC_ORDER = (
     "blocks_found",
 )
 
+MINIMUM_DISPLAY_INTERVAL_SECONDS = 60
+
 
 def env_int(name: str, default: int, minimum: int) -> int:
     value = int(os.environ.get(name, default))
     if value < minimum:
         raise ValueError(f"{name} must be at least {minimum}")
     return value
+
+
+def env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be true or false")
 
 
 def parse_csv(value: str) -> tuple[str, ...]:
@@ -78,6 +92,12 @@ class Config:
     )
     display_interval_seconds: int = field(
         default_factory=lambda: env_int("DISPLAY_INTERVAL_SECONDS", 300, 60)
+    )
+    button_advance_enabled: bool = field(
+        default_factory=lambda: env_bool("BUTTON_ADVANCE_ENABLED", True)
+    )
+    button_poll_seconds: int = field(
+        default_factory=lambda: env_int("BUTTON_POLL_SECONDS", 3, 1)
     )
     source_timeout_seconds: int = field(
         default_factory=lambda: env_int("SOURCE_TIMEOUT_SECONDS", 10, 1)
@@ -350,6 +370,7 @@ class BlockclockClient:
             )
             handlers.append(urllib.request.HTTPDigestAuthHandler(password_manager))
         self.opener = urllib.request.build_opener(*handlers)
+        self.request_lock = threading.RLock()
 
     def pause_backend_updates(self) -> None:
         self._get("/api/action/pause")
@@ -357,27 +378,39 @@ class BlockclockClient:
     def flash_lights(self) -> None:
         self._get("/api/lights/flash")
 
+    def status(self) -> dict[str, Any]:
+        response = self._get("/api/status")
+        if not isinstance(response, dict):
+            raise ValueError("Blockclock status response is not an object")
+        return response
+
     def show(self, metric: str, value: float | int) -> None:
-        path, query = self._display_request(metric, value)
-        self._get(f"{path}?{urllib.parse.urlencode(query)}")
-        if metric == "block_age":
-            self._get("/api/ou_text/6/MIN/%20")
+        with self.request_lock:
+            path, query = self._display_request(metric, value)
+            self._get(f"{path}?{urllib.parse.urlencode(query)}")
+            if metric == "block_age":
+                self._get("/api/ou_text/6/MIN/")
 
     def _get(self, path: str) -> Any:
-        request = urllib.request.Request(
-            f"{self.base_url}{path}",
-            headers={"Accept": "application/json", "User-Agent": "blockclock-umbrel-adapter/1.0"},
-        )
-        with self.opener.open(request, timeout=self.config.source_timeout_seconds) as response:
-            return json.load(response)
+        with self.request_lock:
+            request = urllib.request.Request(
+                f"{self.base_url}{path}",
+                headers={
+                    "Accept": "application/json",
+                    "User-Agent": "blockclock-umbrel-adapter/1.0",
+                },
+            )
+            with self.opener.open(
+                request, timeout=self.config.source_timeout_seconds
+            ) as response:
+                return json.load(response)
 
     @staticmethod
     def _display_request(metric: str, value: float | int) -> tuple[str, dict[str, str]]:
         if metric == "block_height":
             return f"/api/show/number/{int(value)}", {"tl": "BLOCK HEIGHT", "br": "LOCAL NODE"}
         if metric == "block_age":
-            text = urllib.parse.quote(f"{int(value):>5} ", safe="")
-            return f"/api/show/text/{text}", {
+            return f"/api/show/number/{int(value) * 10}", {
                 "tl": "BLOCK AGE",
                 "br": "MINUTES",
                 "pair": "BLK/AGE",
@@ -423,8 +456,12 @@ class Adapter:
         self.alert_state = self.state_store.load()
         self.snapshot = Snapshot()
         self.lock = threading.Lock()
+        self.display_lock = threading.Lock()
         self.stop_event = threading.Event()
         self.metric_index = 0
+        self.last_display_attempt_monotonic = 0.0
+        self.button_monitor_armed = False
+        self.last_button_advance_at: str | None = None
 
     def status(self) -> dict[str, Any]:
         with self.lock:
@@ -444,8 +481,11 @@ class Adapter:
                 if available
                 else None
             )
+            result["button_monitor_armed"] = self.button_monitor_armed
+            result["last_button_advance_at"] = self.last_button_advance_at
         result["enabled_metrics"] = self.config.enabled_metrics
         result["deployed_commit"] = self.deployed_commit
+        result["button_advance_enabled"] = self.config.button_advance_enabled
         return result
 
     def acknowledge_block_found(self) -> dict[str, int | bool]:
@@ -485,7 +525,26 @@ class Adapter:
             if metric in values and (metric != "blocks_found" or alert_active)
         ]
 
+    def _wait_for_display_slot(self) -> bool:
+        if self.stop_event.is_set():
+            return False
+        elapsed = time.monotonic() - self.last_display_attempt_monotonic
+        wait_seconds = max(0.0, MINIMUM_DISPLAY_INTERVAL_SECONDS - elapsed)
+        if wait_seconds:
+            LOGGER.info(
+                "waiting %.1f seconds for the Blockclock display rate limit",
+                wait_seconds,
+            )
+            if self.stop_event.wait(wait_seconds):
+                return False
+        return True
+
     def run_once(self) -> None:
+        with self.display_lock:
+            if self._wait_for_display_slot():
+                self._run_once()
+
+    def _run_once(self) -> None:
         values, errors = self.collector.collect()
         now = datetime.now(timezone.utc).isoformat()
         with self.lock:
@@ -510,6 +569,7 @@ class Adapter:
             metric = available[self.metric_index % len(available)]
             self.metric_index += 1
         try:
+            self.last_display_attempt_monotonic = time.monotonic()
             self.blockclock.show(metric, values[metric])
             if flash_lights:
                 self.blockclock.flash_lights()
@@ -532,6 +592,59 @@ class Adapter:
                 self.snapshot.last_displayed_at = now
                 self.snapshot.display_error = None
             LOGGER.info("displayed %s=%s", metric, values[metric])
+
+    @staticmethod
+    def _button_status_event(
+        status: dict[str, Any], armed: bool
+    ) -> tuple[bool, bool]:
+        if status.get("menu_active") is True:
+            return armed, False
+        showing = status.get("showing")
+        if not isinstance(showing, str):
+            return armed, False
+        if showing == "static.api":
+            return True, False
+        if armed:
+            return False, True
+        return False, False
+
+    def _advance_after_button_press(self) -> bool:
+        with self.display_lock:
+            status = self.blockclock.status()
+            _, should_advance = self._button_status_event(status, True)
+            if not should_advance:
+                return False
+            if not self._wait_for_display_slot():
+                return False
+            status = self.blockclock.status()
+            _, should_advance = self._button_status_event(status, True)
+            if not should_advance:
+                return False
+            self._run_once()
+            with self.lock:
+                self.last_button_advance_at = datetime.now(timezone.utc).isoformat()
+            return True
+
+    def monitor_buttons(self) -> None:
+        armed = False
+        while not self.stop_event.is_set():
+            try:
+                status = self.blockclock.status()
+                armed, should_advance = self._button_status_event(status, armed)
+                with self.lock:
+                    self.button_monitor_armed = armed
+                if should_advance:
+                    LOGGER.info("middle-button display change detected")
+                    try:
+                        self._advance_after_button_press()
+                    except Exception:
+                        armed = True
+                        with self.lock:
+                            self.button_monitor_armed = True
+                        LOGGER.exception("button-triggered update failed; will retry")
+            except (OSError, ValueError, urllib.error.URLError) as error:
+                LOGGER.warning("could not poll Blockclock button state: %s", error)
+            self.stop_event.wait(self.config.button_poll_seconds)
 
     def run(self) -> None:
         try:
@@ -596,6 +709,13 @@ def main() -> None:
     adapter = Adapter(config)
     server = ThreadingHTTPServer((config.bind_host, config.bind_port), make_handler(adapter))
     worker = threading.Thread(target=adapter.run, name="display-rotation", daemon=True)
+    button_worker = None
+    if config.button_advance_enabled:
+        button_worker = threading.Thread(
+            target=adapter.monitor_buttons,
+            name="button-monitor",
+            daemon=True,
+        )
 
     def stop(*_: Any) -> None:
         adapter.stop_event.set()
@@ -604,12 +724,16 @@ def main() -> None:
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     worker.start()
+    if button_worker is not None:
+        button_worker.start()
     LOGGER.info("status endpoint listening on %s:%s", config.bind_host, config.bind_port)
     try:
         server.serve_forever()
     finally:
         adapter.stop_event.set()
         worker.join(timeout=5)
+        if button_worker is not None:
+            button_worker.join(timeout=5)
         server.server_close()
 
 

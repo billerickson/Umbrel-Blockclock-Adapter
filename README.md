@@ -18,7 +18,9 @@ Coinbase HTTPS --------+
 BLOCKCLOCK-initiated traffic to LAN/WAN: blocked
 ```
 
-The adapter rotates one value onto the E-Ink display every five minutes.
+The adapter rotates one value onto the E-Ink display every five minutes. On
+firmware 1.2.3 or newer, either middle button requests the next available
+adapter display. The top and bottom buttons retain their normal menu behavior.
 
 ## Displayed values
 
@@ -171,6 +173,8 @@ Open `http://192.168.40.20/` from the allowed admin workstation.
    release. Firmware updates can be downloaded on another computer and applied
    through the local firmware upload page or MicroSD card without granting the
    device Internet access.
+6. Install firmware 1.2.3 or newer if you want the two middle buttons to
+   advance the adapter rotation.
 
 The adapter supports HTTP Digest authentication. Put the same system password
 in `BLOCKCLOCK_PASSWORD` on Umbrel.
@@ -256,6 +260,12 @@ ENABLED_METRICS=block_height,block_age,fastest_fee,btc_price,moscow_time
 
 The display interval cannot be set below 60 seconds. Five minutes is the
 default because Coinkite recommends a low update rate for the E-Ink display.
+`BUTTON_ADVANCE_ENABLED` enables Umbrel-side monitoring of the BLOCKCLOCK's
+local status endpoint, and `BUTTON_POLL_SECONDS` controls how often it checks.
+The default is a three-second poll. After a middle-button press, the firmware's
+built-in screen may appear briefly before the adapter pushes the next custom
+screen. Rapid repeat presses can take up to one minute because the adapter
+enforces the E-Ink display's update-rate limit.
 
 The price URL must use HTTPS and its hostname must appear in
 `PRICE_ALLOWED_HOSTS`. The defaults permit only `api.coinbase.com`.
@@ -294,8 +304,8 @@ timeout 4 bash -c '</dev/tcp/192.168.40.20/8266' \
 ```
 
 Zero or near-zero bandwidth in the UniFi client view is normal while the
-display is idle. The adapter initiates a short local request only when it
-changes the display.
+display is idle. With button monitoring enabled, the adapter also makes a tiny
+local status request every few seconds.
 
 ## Threat-model notes
 

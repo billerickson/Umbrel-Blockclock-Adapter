@@ -55,7 +55,7 @@ class DisplayTests(unittest.TestCase):
 
     def test_block_age_shows_minutes(self):
         path, query = BlockclockClient._display_request("block_age", 17)
-        self.assertEqual(path, "/api/show/text/%20%20%2017%20")
+        self.assertEqual(path, "/api/show/number/170")
         self.assertEqual(query["pair"], "BLK/AGE")
         self.assertEqual(query["br"], "MINUTES")
 
@@ -67,10 +67,10 @@ class DisplayTests(unittest.TestCase):
             get.call_args_list,
             [
                 call(
-                    "/api/show/text/%20%20%20%203%20"
+                    "/api/show/number/30"
                     "?tl=BLOCK+AGE&br=MINUTES&pair=BLK%2FAGE"
                 ),
-                call("/api/ou_text/6/MIN/%20"),
+                call("/api/ou_text/6/MIN/"),
             ],
         )
 
@@ -90,6 +90,25 @@ class DisplayTests(unittest.TestCase):
         ):
             status = Adapter(self.config).status()
         self.assertEqual(status["deployed_commit"], "0123456789abcdef")
+
+    def test_button_status_transition_advances_only_outside_menu(self):
+        armed, advance = Adapter._button_status_event(
+            {"showing": "static.api", "menu_active": False}, False
+        )
+        self.assertTrue(armed)
+        self.assertFalse(advance)
+
+        armed, advance = Adapter._button_status_event(
+            {"showing": "err.problem", "menu_active": True}, armed
+        )
+        self.assertTrue(armed)
+        self.assertFalse(advance)
+
+        armed, advance = Adapter._button_status_event(
+            {"showing": "err.problem", "menu_active": False}, armed
+        )
+        self.assertFalse(armed)
+        self.assertTrue(advance)
 
     def test_flash_lights_uses_flash_endpoint(self):
         client = BlockclockClient(self.config)
@@ -120,6 +139,11 @@ class AdapterTests(unittest.TestCase):
     def setUp(self):
         with patch.dict(os.environ, {}, clear=True):
             self.config = Config()
+        display_interval = patch(
+            "blockclock_adapter.app.MINIMUM_DISPLAY_INTERVAL_SECONDS", 0
+        )
+        display_interval.start()
+        self.addCleanup(display_interval.stop)
 
     def test_blocks_found_stays_in_rotation_until_acknowledged(self):
         with TemporaryDirectory() as temporary_directory:
@@ -169,6 +193,16 @@ class AdapterTests(unittest.TestCase):
 
 
 class ConfigTests(unittest.TestCase):
+    def test_reads_button_monitor_configuration(self):
+        with patch.dict(
+            os.environ,
+            {"BUTTON_ADVANCE_ENABLED": "off", "BUTTON_POLL_SECONDS": "7"},
+            clear=True,
+        ):
+            config = Config()
+        self.assertFalse(config.button_advance_enabled)
+        self.assertEqual(config.button_poll_seconds, 7)
+
     def test_rejects_unapproved_price_host(self):
         with patch.dict(
             os.environ,
