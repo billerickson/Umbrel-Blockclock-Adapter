@@ -1,0 +1,25 @@
+services:
+  blockclock-adapter:
+    build: .
+    container_name: blockclock-adapter
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      MEMPOOL_BASE_URL: ${MEMPOOL_BASE_URL:-http://127.0.0.1:3006}
+      POOL_API_URL: ${POOL_API_URL:-http://127.0.0.1:2019/api/pool}
+      PRICE_API_URL: ${PRICE_API_URL:-https://api.coinbase.com/v2/prices/BTC-USD/spot}
+      PRICE_ALLOWED_HOSTS: ${PRICE_ALLOWED_HOSTS:-api.coinbase.com}
+      BLOCKCLOCK_URL: ${BLOCKCLOCK_URL:-http://192.168.40.20}
+      BLOCKCLOCK_PASSWORD: ${BLOCKCLOCK_PASSWORD:-}
+      ENABLED_METRICS: ${ENABLED_METRICS:-block_height,fastest_fee,btc_price,moscow_time,hash_rate,blocks_found}
+      DISPLAY_INTERVAL_SECONDS: ${DISPLAY_INTERVAL_SECONDS:-300}
+      SOURCE_TIMEOUT_SECONDS: ${SOURCE_TIMEOUT_SECONDS:-10}
+      BIND_HOST: ${BIND_HOST:-127.0.0.1}
+      BIND_PORT: ${BIND_PORT:-21022}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m,mode=1777
