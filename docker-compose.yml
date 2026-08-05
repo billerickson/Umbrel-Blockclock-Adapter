@@ -1,6 +1,9 @@
 services:
   blockclock-adapter:
-    build: .
+    build:
+      context: .
+      args:
+        BLOCKCLOCK_ADAPTER_VERSION: ${BLOCKCLOCK_ADAPTER_VERSION:-unknown}
     container_name: blockclock-adapter
     restart: unless-stopped
     network_mode: host

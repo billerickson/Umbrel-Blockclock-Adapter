@@ -322,6 +322,7 @@ class BlockclockClient:
 class Adapter:
     def __init__(self, config: Config):
         self.config = config
+        self.deployed_commit = os.environ.get("BLOCKCLOCK_ADAPTER_VERSION", "unknown")
         self.collector = DataCollector(config)
         self.blockclock = BlockclockClient(config)
         self.snapshot = Snapshot()
@@ -333,6 +334,7 @@ class Adapter:
         with self.lock:
             result = asdict(self.snapshot)
         result["enabled_metrics"] = self.config.enabled_metrics
+        result["deployed_commit"] = self.deployed_commit
         result["next_metric"] = self.config.enabled_metrics[
             self.metric_index % len(self.config.enabled_metrics)
         ]

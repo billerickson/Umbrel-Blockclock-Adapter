@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import patch
 
 from blockclock_adapter.app import (
+    Adapter,
     BlockclockClient,
     Config,
     blocks_found_count,
@@ -49,6 +50,13 @@ class DisplayTests(unittest.TestCase):
         path, query = BlockclockClient._display_request("hash_rate", 813_234_574_831.3806)
         self.assertEqual(path, "/api/show/text/813GH")
         self.assertEqual(query["tl"], "POOL HASH")
+
+    def test_status_includes_deployed_commit(self):
+        with patch.dict(
+            os.environ, {"BLOCKCLOCK_ADAPTER_VERSION": "0123456789abcdef"}
+        ):
+            status = Adapter(self.config).status()
+        self.assertEqual(status["deployed_commit"], "0123456789abcdef")
 
 
 class ConfigTests(unittest.TestCase):

@@ -172,12 +172,15 @@ in `BLOCKCLOCK_PASSWORD` on Umbrel.
 
 ## Install on Umbrel
 
-Copy this repository to Umbrel, then run:
+Clone this repository on Umbrel, then create the host-specific configuration:
 
 ```sh
-mkdir -p ~/umbrel/app-data/blockclock-adapter
+mkdir -p ~/umbrel/app-data
+git clone https://github.com/billerickson/Umbrel-Blockclock-Adapter.git \
+  ~/umbrel/app-data/blockclock-adapter
 cd ~/umbrel/app-data/blockclock-adapter
 cp .env.example .env
+chmod 600 .env
 ```
 
 Edit `.env` and replace the example BLOCKCLOCK address:
@@ -187,11 +190,10 @@ BLOCKCLOCK_URL=http://192.168.40.20
 BLOCKCLOCK_PASSWORD=replace-with-your-blockclock-password
 ```
 
-Start the service:
+Start the service through the tested deployment workflow:
 
 ```sh
-sudo docker compose up -d --build
-sudo docker compose logs -f --tail=100
+./tools/deploy-umbrel.sh
 ```
 
 The container uses host networking so it can reach the Umbrel apps on
@@ -204,7 +206,23 @@ Check status on Umbrel:
 curl -fsS http://127.0.0.1:21022/status
 ```
 
-A healthy response has an empty `errors` object and `display_error: null`.
+A healthy response has an empty `errors` object, `display_error: null`, and a
+`deployed_commit` matching `git rev-parse HEAD`.
+
+## Update on Umbrel
+
+Run the deployment script from an interactive SSH session so `sudo` can prompt
+for the Umbrel password:
+
+```sh
+ssh -t umbrel@umbrel-host \
+  'cd ~/umbrel/app-data/blockclock-adapter && ./tools/deploy-umbrel.sh'
+```
+
+The script refuses modified tracked files or an unexpected branch, pulls
+`origin/master` with a fast-forward-only merge, runs the test suite, rebuilds
+the container, and waits until the status endpoint reports both a healthy state
+and the expected Git commit. The host-specific `.env` remains untracked.
 
 ## Configuration
 
