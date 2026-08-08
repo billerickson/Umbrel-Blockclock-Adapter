@@ -28,12 +28,12 @@ if [ -z "$systemctl_bin" ]; then
     exit 1
 fi
 
-# systemd expands percent specifiers and uses backslash and double quote while
-# parsing quoted paths. Refuse unusual paths rather than generating an unsafe
-# or ambiguous unit file.
+# ConditionPathExists= and WorkingDirectory= require an unquoted absolute path.
+# Refuse characters that would require systemd escaping rather than generating
+# an unsafe or ambiguous unit file.
 case "$project_dir$docker_bin" in
-    *%*|*\\*|*\"*)
-        echo "Cannot install from a path containing %, backslash, or double quote" >&2
+    *[[:space:]]*|*%*|*\\*|*\"*)
+        echo "Cannot install from a path containing whitespace, %, backslash, or double quote" >&2
         exit 1
         ;;
 esac
@@ -47,11 +47,11 @@ Description=Umbrel BLOCKCLOCK adapter
 Requires=docker.service
 After=docker.service network-online.target
 Wants=network-online.target
-ConditionPathExists="$project_dir/.env"
+ConditionPathExists=$project_dir/.env
 
 [Service]
 Type=oneshot
-WorkingDirectory="$project_dir"
+WorkingDirectory=$project_dir
 ExecStart="$docker_bin" compose up -d --remove-orphans
 ExecStop="$docker_bin" compose stop
 RemainAfterExit=yes
