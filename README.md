@@ -205,6 +205,26 @@ Start the service through the tested deployment workflow:
 ./tools/deploy-umbrel.sh
 ```
 
+Install the boot service once so the adapter is brought up after Docker on
+every Umbrel restart:
+
+```sh
+sudo ./tools/install-boot-service.sh
+```
+
+The installer enables `blockclock-adapter.service`. The unit runs
+`docker compose up -d` at boot, so it can recreate or start the adapter even
+if Docker's `restart: unless-stopped` policy does not restore it. It does not
+power-cycle the BLOCKCLOCK; once the adapter is running, the normal rotation
+pushes a fresh display to the clock.
+
+Verify the boot service at any time:
+
+```sh
+systemctl is-enabled blockclock-adapter.service
+systemctl status blockclock-adapter.service
+```
+
 The container uses host networking so it can reach the Umbrel apps on
 `127.0.0.1:3006` and `127.0.0.1:2019`. Its status API binds only to
 `127.0.0.1:21022` by default.
